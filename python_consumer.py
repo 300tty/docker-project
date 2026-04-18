@@ -5,17 +5,17 @@ from datetime import datetime
 from collections import defaultdict
 import time
 
-# 连接 PostgreSQL
+# link PostgreSQL
 conn = psycopg2.connect(
     host='localhost',
-    port=5432,
+    port=5433,  
     database='testdb',
     user='postgres',
     password='postgres'
 )
 cur = conn.cursor()
 
-# 创建表（如果不存在）
+# create chart
 cur.execute("""
     CREATE TABLE IF NOT EXISTS product_views (
         window_start TIMESTAMP,
@@ -26,7 +26,7 @@ cur.execute("""
 """)
 conn.commit()
 
-# 连接 Kafka
+# link Kafka
 consumer = KafkaConsumer(
     'user-behavior',
     bootstrap_servers='localhost:9092',
@@ -34,27 +34,27 @@ consumer = KafkaConsumer(
     value_deserializer=lambda v: json.loads(v.decode('utf-8'))
 )
 
-print("开始消费 Kafka 数据...")
+print("consumer Kafka data...")
 
-# 存储窗口数据
+# save data
 window_data = defaultdict(int)
 window_start = None
 
 for msg in consumer:
     data = msg.value
     
-    # 只统计 view 行为
+    # Only count view actions
     if data['action'] != 'view':
         continue
     
-    # 解析时间
+    # Parsing time
     msg_time = datetime.fromisoformat(data['timestamp'])
     product_id = data['product_id']
     
-    # 计算当前窗口（1分钟）
+    # Calculate the current window (1 minute)
     current_window = msg_time.replace(second=0, microsecond=0)
     
-    # 如果窗口变化，写入数据库
+    #If the window changes, write to the database
     if window_start is not None and current_window != window_start:
         window_end = window_start.replace(minute=window_start.minute + 1)
         for pid, count in window_data.items():
@@ -63,7 +63,7 @@ for msg in consumer:
                 VALUES (%s, %s, %s, %s)
             """, (window_start, window_end, pid, count))
         conn.commit()
-        print(f"已写入窗口 {window_start} - {window_end} 的数据")
+        print(f"Written to the window {window_start} - {window_end} data")
         window_data.clear()
     
     window_start = current_window
